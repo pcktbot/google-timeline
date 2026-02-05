@@ -1,5 +1,13 @@
 # google-timeline
 
+> **Human's Note:**
+>
+> I like Google Timeline for tracking trips and I get a lot of meaning at seeing how I navigated the cities I have lived in via map. But I like working on desktops and Google Maps has removed support for editing timeline data on the web app. The data is not the most accurate in the world but does a good job of finding Google Places nearby 😉.
+>
+> I like the tech stack I got with only minimal prompting. Bun and Postgres is a current favorite combo. Just got a really performant app. I've learned a lot about backend that helps me desribe UI features. 
+>
+> Claude Opus 4.5.
+
 A web app for visualizing and organizing Google Location Timeline data on an interactive Mapbox GL map. Create trips from your visit history, generate road-following routes between stops, and add custom waypoints.
 
 ## Prerequisites
