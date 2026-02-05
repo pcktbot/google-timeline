@@ -5,7 +5,7 @@ const { Pool } = require('pg');
 
 // Database connection
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL || 'postgresql://localhost:5432/google_timeline'
+  connectionString: process.env.DATABASE_URL
 });
 
 function parseGeoString(geoStr) {
