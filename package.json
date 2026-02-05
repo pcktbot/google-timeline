@@ -1,6 +1,10 @@
 {
   "name": "google-timeline",
   "private": true,
+  "main": "server.ts",
+  "scripts": {
+    "dev": "bun --hot server.ts"
+  },
   "devDependencies": {
     "@types/bun": "latest"
   },
@@ -8,6 +12,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "mapbox-gl": "^3.18.1",
     "pg": "^8.18.0"
   }
 }

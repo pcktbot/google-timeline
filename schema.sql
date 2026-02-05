@@ -149,3 +149,65 @@ CREATE TRIGGER update_places_updated_at
 -- GRANT ALL ON places TO your_user;
 -- GRANT USAGE, SELECT ON SEQUENCE timeline_entries_id_seq TO your_user;
 -- GRANT USAGE, SELECT ON SEQUENCE places_id_seq TO your_user;
+
+-- ============================================
+-- Trip tables
+-- ============================================
+
+CREATE TABLE trips (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    description TEXT,
+    color VARCHAR(7) DEFAULT '#e11d48',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TRIGGER update_trips_updated_at
+    BEFORE UPDATE ON trips
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Ordered stops within a trip (either a timeline entry reference or a freeform waypoint)
+CREATE TABLE trip_stops (
+    id SERIAL PRIMARY KEY,
+    trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    position INTEGER NOT NULL,
+
+    -- Reference to an existing timeline entry (for visits)
+    timeline_entry_id INTEGER REFERENCES timeline_entries(id) ON DELETE SET NULL,
+
+    -- Freeform waypoint (user-dropped point)
+    waypoint_location GEOGRAPHY(POINT, 4326),
+    waypoint_name VARCHAR(255),
+
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+
+    -- Must be one or the other
+    CONSTRAINT stop_has_source CHECK (
+        (timeline_entry_id IS NOT NULL AND waypoint_location IS NULL)
+        OR (timeline_entry_id IS NULL AND waypoint_location IS NOT NULL)
+    ),
+    CONSTRAINT unique_position_per_trip UNIQUE (trip_id, position)
+);
+
+CREATE INDEX idx_trip_stops_trip_id ON trip_stops(trip_id);
+CREATE INDEX idx_trip_stops_timeline_entry ON trip_stops(timeline_entry_id);
+
+-- Cached route geometry between consecutive stops (from Mapbox Directions)
+CREATE TABLE trip_route_segments (
+    id SERIAL PRIMARY KEY,
+    trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
+    from_stop_id INTEGER NOT NULL REFERENCES trip_stops(id) ON DELETE CASCADE,
+    to_stop_id INTEGER NOT NULL REFERENCES trip_stops(id) ON DELETE CASCADE,
+    route_geometry GEOGRAPHY(LINESTRING, 4326) NOT NULL,
+    distance_meters DECIMAL(12, 2),
+    duration_seconds DECIMAL(10, 2),
+    profile VARCHAR(30) DEFAULT 'driving',
+    fetched_at TIMESTAMPTZ DEFAULT NOW(),
+
+    CONSTRAINT unique_segment UNIQUE (trip_id, from_stop_id, to_stop_id)
+);
+
+CREATE INDEX idx_trip_segments_trip_id ON trip_route_segments(trip_id);
+CREATE INDEX idx_trip_segments_geometry ON trip_route_segments USING GIST(route_geometry);
