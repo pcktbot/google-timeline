@@ -699,6 +699,121 @@ deleteTripBtn.addEventListener("click", async () => {
   flashStatus("Trip deleted");
 });
 
+// ─── Draggable point marker ──────────────────────────────────────────
+
+let dragMarker: mapboxgl.Marker | null = null;
+let dragPopup: mapboxgl.Popup | null = null;
+let lastMove: { entryId: number; prevLng: number; prevLat: number; props: any } | null = null;
+
+function clearDragMarker() {
+  if (dragMarker) { dragMarker.remove(); dragMarker = null; }
+  if (dragPopup) { dragPopup.remove(); dragPopup = null; }
+}
+
+function makeDragPopupHTML(props: any, lngLat: { lng: number; lat: number }, showUndo: boolean) {
+  return `
+    <div class="popup-title">${props.semantic_type || "Visit"}</div>
+    <div class="popup-dates">
+      ${new Date(props.start_time).toLocaleString()}<br/>
+      ${new Date(props.end_time).toLocaleString()}
+    </div>
+    <div class="popup-coords">${lngLat.lat.toFixed(6)}, ${lngLat.lng.toFixed(6)}</div>
+    <div class="popup-hint">Drag marker to relocate</div>
+    ${showUndo ? '<button class="popup-undo">Undo move</button>' : ""}
+  `;
+}
+
+function updateSourcePoint(entryId: number, lng: number, lat: number) {
+  const src = map.getSource("timeline") as mapboxgl.GeoJSONSource | undefined;
+  if (src) {
+    const data = (src as any)._data as GeoJSON.FeatureCollection;
+    const feature = data.features.find((f: any) => f.properties.id === entryId);
+    if (feature && feature.geometry.type === "Point") {
+      (feature.geometry as GeoJSON.Point).coordinates = [lng, lat];
+      src.setData(data);
+    }
+  }
+}
+
+function bindUndoButton() {
+  const btn = dragPopup?.getElement()?.querySelector(".popup-undo");
+  if (!btn || !lastMove) return;
+  const move = lastMove;
+  btn.addEventListener("click", async (e) => {
+    e.stopPropagation();
+    showStatus("Undoing move...");
+
+    const res = await fetch(`/api/timeline/${move.entryId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lng: move.prevLng, lat: move.prevLat }),
+    });
+
+    if (res.ok) {
+      const pos = { lng: move.prevLng, lat: move.prevLat };
+      updateSourcePoint(move.entryId, pos.lng, pos.lat);
+      dragMarker?.setLngLat(pos);
+      dragPopup?.setLngLat(pos);
+      lastMove = null;
+      dragPopup?.setHTML(makeDragPopupHTML(move.props, pos, false));
+      flashStatus("Move undone");
+    } else {
+      flashStatus("Failed to undo");
+    }
+  });
+}
+
+function showDragMarker(coords: [number, number], props: any) {
+  clearDragMarker();
+
+  const lngLat = { lng: coords[0], lat: coords[1] };
+  const entryId = props.id;
+  const canUndo = lastMove?.entryId === entryId;
+
+  dragMarker = new mapboxgl.Marker({ draggable: true, color: "#3b82f6" })
+    .setLngLat(lngLat)
+    .addTo(map);
+
+  dragPopup = new mapboxgl.Popup({ offset: 30, closeOnClick: false })
+    .setLngLat(lngLat)
+    .setHTML(makeDragPopupHTML(props, lngLat, canUndo))
+    .addTo(map);
+
+  if (canUndo) bindUndoButton();
+
+  dragPopup.on("close", clearDragMarker);
+
+  dragMarker.on("drag", () => {
+    const pos = dragMarker!.getLngLat();
+    dragPopup?.setLngLat(pos);
+    const coordsEl = dragPopup?.getElement()?.querySelector(".popup-coords");
+    if (coordsEl) coordsEl.textContent = `${pos.lat.toFixed(6)}, ${pos.lng.toFixed(6)}`;
+  });
+
+  dragMarker.on("dragend", async () => {
+    const pos = dragMarker!.getLngLat();
+    const prevLng = lngLat.lng;
+    const prevLat = lngLat.lat;
+    showStatus("Updating location...");
+
+    const res = await fetch(`/api/timeline/${entryId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ lng: pos.lng, lat: pos.lat }),
+    });
+
+    if (res.ok) {
+      updateSourcePoint(entryId, pos.lng, pos.lat);
+      lastMove = { entryId, prevLng, prevLat, props };
+      flashStatus("Location updated");
+      dragPopup?.setHTML(makeDragPopupHTML(props, pos, true));
+      bindUndoButton();
+    } else {
+      flashStatus("Failed to update location");
+    }
+  });
+}
+
 // ─── Map click handlers ──────────────────────────────────────────────
 
 map.on("click", "timeline-points", async (e) => {
@@ -716,16 +831,10 @@ map.on("click", "timeline-points", async (e) => {
     return;
   }
 
-  const props = e.features?.[0]?.properties;
-  if (!props) return;
-  new mapboxgl.Popup()
-    .setLngLat(e.lngLat)
-    .setHTML(
-      `<strong>${props.semantic_type || "Visit"}</strong><br/>
-       ${new Date(props.start_time).toLocaleString()} &mdash;
-       ${new Date(props.end_time).toLocaleString()}`
-    )
-    .addTo(map);
+  const feature = e.features?.[0];
+  if (!feature?.properties) return;
+  const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number];
+  showDragMarker(coords, feature.properties);
 });
 
 map.on("click", (e) => {

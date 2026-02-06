@@ -126,6 +126,27 @@ Bun.serve({
         }),
     },
 
+    // --- Update timeline entry location ---
+    "/api/timeline/:id": {
+      PATCH: async (req) => {
+        const { id } = req.params;
+        const { lng, lat } = await req.json() as { lng: number; lat: number };
+
+        if (lng == null || lat == null) {
+          return Response.json({ error: "lng and lat required" }, { status: 400 });
+        }
+
+        await db`
+          UPDATE timeline_entries
+          SET location = ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)::geography,
+              edited = true
+          WHERE id = ${id}
+        `;
+
+        return Response.json({ ok: true, id: Number(id), lng, lat });
+      },
+    },
+
     // --- Timeline bounds (date range + center) ---
     "/api/timeline/bounds": {
       GET: async () => {

@@ -10,6 +10,8 @@
 
 A web app for visualizing and organizing Google Location Timeline data on an interactive Mapbox GL map. Create trips from your visit history, generate road-following routes between stops, and add custom waypoints.
 
+![Preview of the routes visualization](preview-routes.png)
+
 ## Prerequisites
 
 - [Bun](https://bun.sh) runtime
